@@ -1,0 +1,30 @@
+---
+- name: Install AMDGPU DKMS driver and kernel modules
+  hosts: kvm_vms
+  become: yes
+  tasks:
+
+    - name: Download AMDGPU installer .deb package
+      get_url:
+        url: https://repo.radeon.com/amdgpu-install/6.4/ubuntu/jammy/amdgpu-install_6.4.60400-1_all.deb
+        dest: /tmp/amdgpu-install_6.4.60400-1_all.deb
+
+    - name: Install AMDGPU installer package
+      apt:
+        deb: /tmp/amdgpu-install_6.4.60400-1_all.deb
+
+    - name: Update APT package cache
+      apt:
+        update_cache: yes
+
+    - name: Install kernel headers and extra modules
+      apt:
+        name:
+          - "linux-headers-{{ ansible_kernel }}"
+          - "linux-modules-extra-{{ ansible_kernel }}"
+        state: present
+
+    - name: Install AMDGPU DKMS driver
+      apt:
+        name: amdgpu-dkms
+        state: present
