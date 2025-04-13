@@ -1,0 +1,50 @@
+---
+- name: Register and manage amdgpu-exporter service
+  hosts: kvm_vms
+  become: yes
+  tasks:
+
+    - name: Create systemd service for amdgpu-exporter
+      copy:
+        dest: /etc/systemd/system/amdgpu-exporter.service
+        content: |
+          [Unit]
+          Description=AMDGPU Prometheus Exporter
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/bin/amdgpu-exporter
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd
+      register: service_unit
+
+    - name: Check if amdgpu-exporter service is running
+      shell: systemctl is-active amdgpu-exporter
+      register: exporter_status
+      changed_when: false
+      failed_when: false
+
+    - name: Start and enable amdgpu-exporter only if not running
+      systemd:
+        name: amdgpu-exporter
+        enabled: yes
+        state: started
+      when: exporter_status.stdout != "active"
+
+    - name: Re-check amdgpu-exporter status (allow 'activating' state)
+      shell: systemctl is-active amdgpu-exporter
+      register: exporter_status_final
+      changed_when: false
+      failed_when: false
+
+    - name: Print final exporter status
+      debug:
+        msg: "amdgpu-exporter on {{ inventory_hostname }} is {{ exporter_status_final.stdout }}"
+
+  handlers:
+    - name: Reload systemd
+      command: systemctl daemon-reexec
