@@ -1,0 +1,17 @@
+---
+- name: Check amdgpu kernel module status on VMs
+  hosts: kvm_vms
+  become: true
+  gather_facts: no
+
+  tasks:
+    - name: Check if amdgpu module is loaded
+      shell: "lsmod | grep amdgpu || echo 'not loaded'"
+      register: amdgpu_status
+      changed_when: false
+
+    - name: Print amdgpu status
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          AMDGPU status: {{ 'Loaded' if 'amdgpu' in amdgpu_status.stdout else 'Not Loaded' }}
