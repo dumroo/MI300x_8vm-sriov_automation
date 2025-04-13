@@ -1,0 +1,32 @@
+---
+- name: Install AMDGPU Exporter from ROCm device-metrics repo
+  hosts: kvm_vms
+  become: yes
+  tasks:
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download and store AMD ROCm GPG key (dearmored)
+      shell: |
+        wget -q https://repo.radeon.com/rocm/rocm.gpg.key -O - | gpg --dearmor | tee /etc/apt/keyrings/rocm.gpg
+      args:
+        executable: /bin/bash
+
+    - name: Add AMDGPU Exporter APT repository
+      copy:
+        dest: /etc/apt/sources.list.d/amdgpu-exporter.list
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/device-metrics-exporter/apt/1.2.0 jammy main
+
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
+    - name: Install amdgpu-exporter package
+      apt:
+        name: amdgpu-exporter
+        state: present
