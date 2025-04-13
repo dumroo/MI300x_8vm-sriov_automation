@@ -1,0 +1,35 @@
+---
+- name: Install AMD ROCm stack on all KVM VMs
+  hosts: kvm_vms
+  become: yes
+  tasks:
+    - name: Download AMDGPU installer .deb package
+      get_url:
+        url: https://repo.radeon.com/amdgpu-install/6.4/ubuntu/jammy/amdgpu-install_6.4.60400-1_all.deb
+        dest: /tmp/amdgpu-install_6.4.60400-1_all.deb
+
+    - name: Install AMDGPU installer package
+      apt:
+        deb: /tmp/amdgpu-install_6.4.60400-1_all.deb
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Python dependencies
+      apt:
+        name:
+          - python3-setuptools
+          - python3-wheel
+        state: present
+
+    - name: Add current user to render and video groups
+      user:
+        name: "{{ ansible_user }}"
+        groups: render,video
+        append: yes
+
+    - name: Install ROCm meta package
+      apt:
+        name: rocm
+        state: present
