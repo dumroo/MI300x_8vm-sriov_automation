@@ -7,6 +7,7 @@ This repository provides a set of Ansible playbooks for orchestrating an AMD MI3
 - install_amdgpu_exporter.yml - Exporter installation across 8VMs
 - manage_exporter.yml - check and start exporter automatically across 8V
 - check_amdgpu_status.yml - check and provide status of each GPU assigned to 8VMs
+- mi300x_sriov_tool.yml - allow to assing any number of GPU to a machine- 
 ---
 
 ## ⚙️ Requirements
