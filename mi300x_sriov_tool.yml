@@ -1,0 +1,97 @@
+---
+- name: MI300X SR-IOV VF Manager for Ubuntu 22.04 Guest
+  hosts: localhost
+  gather_facts: no
+
+  vars_prompt:
+    - name: "vm_name"
+      prompt: "Enter VM name"
+      private: no
+      default: "ubuntu22.04-vm1"
+
+    - name: "vf_count"
+      prompt: "Enter number of VFs to assign to VM (1–8)"
+      private: no
+      default: "4"
+
+    - name: "remove_existing"
+      prompt: "Remove all currently assigned VFs first? (yes/no)"
+      private: no
+      default: "yes"
+
+    - name: "dry_run"
+      prompt: "Run in dry-run mode? (true/false)"
+      private: no
+      default: "false"
+
+  tasks:
+    - name: Get all AMD VF BDFs (Device ID 74b5)
+      shell: "lspci -d 1002:74b5 | awk '{print $1}'"
+      register: lspci_output
+      changed_when: true
+
+    - name: Set all available PCI device list
+      set_fact:
+        pci_devices: "{{ lspci_output.stdout_lines }}"
+
+    - name: Trim to user-selected VF count
+      set_fact:
+        selected_pci_devices: "{{ pci_devices[0: (vf_count | int)] }}"
+
+    - name: Dump current VM XML
+      command: "virsh dumpxml {{ vm_name }}"
+      register: vm_xml
+      become: true
+
+    - name: Clean existing hostdev entries from XML
+      copy:
+        dest: "/tmp/{{ vm_name }}_cleaned.xml"
+        content: >
+          {% if remove_existing in ['yes', 'Yes', 'true', 'True'] %}
+          {{ vm_xml.stdout | regex_replace('(?s)<hostdev.*?</hostdev>', '') }}
+          {% else %}
+          {{ vm_xml.stdout }}
+          {% endif %}
+
+    - name: Read cleaned XML content into variable
+      slurp:
+        src: "/tmp/{{ vm_name }}_cleaned.xml"
+      register: cleaned_vm_xml_raw
+
+    - name: Decode cleaned base XML content
+      set_fact:
+        base_vm_xml: "{{ cleaned_vm_xml_raw['content'] | b64decode }}"
+
+    - name: Show VFs to assign (Dry Run)
+      debug:
+        msg: "✔ VF {{ item }} will be assigned to VM"
+      loop: "{{ selected_pci_devices }}"
+      when: dry_run | bool
+
+    - name: Stop if dry run mode is enabled
+      meta: end_play
+      when: dry_run | bool
+
+    - name: Generate hostdev XML blocks from selected VFs
+      set_fact:
+        hostdev_blocks: |
+          {% for dev in selected_pci_devices %}
+          <hostdev mode='subsystem' type='pci' managed='yes'>
+            <source>
+              <address domain='0x0000'
+                       bus='0x{{ '%02x' % (dev.split(':')[0] | int(base=16)) }}'
+                       slot='0x{{ '%02x' % (dev.split(':')[1].split('.')[0] | int(base=16)) }}'
+                       function='0x{{ dev.split('.')[1] }}'/>
+            </source>
+          </hostdev>
+          {% endfor %}
+
+    - name: Append new hostdev entries to VM XML
+      copy:
+        dest: "/tmp/{{ vm_name }}_with_new_vfs.xml"
+        content: |
+          {{ base_vm_xml | regex_replace('</devices>', hostdev_blocks + '\n</devices>') }}
+
+    - name: Redefine the VM with updated XML
+      command: "virsh define /tmp/{{ vm_name }}_with_new_vfs.xml"
+      become: true
